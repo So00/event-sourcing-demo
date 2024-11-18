@@ -135,39 +135,57 @@ export const removeLike = (id: string, username: string): IMessage => {
 }
 
 export const migrate = () => {
+    // Creation des nouvelles "bases de données"
     const messageHistory: MessageHistory = {};
     const commentHistory: CommentHistory = {};
     const likeHistory: LikeHistory = {};
     const updatedMessages: MessageInDatabase = {};
 
+    // Récupération des anciens messages
     const messagesDatabase = getLegacyMessages();
+    // On itère sur tous les messages
     for (const uid of Object.keys(messagesDatabase)) {
         let finalMessage: IMessage;
         likeHistory[uid] = [];
 
+        // Iteration sur tous les messages actuellement en base de donnée pour un id donné
         for (const id in messagesDatabase[uid]) {
+            const idInt = parseInt(id);
             const message = messagesDatabase[uid][id];
+            // On créé la nouvelle entrée pour sauvegarder l'historique d'un même message
             if (!messageHistory[message.id]) messageHistory[message.id] = [];
-            if (!messageHistory[message.id].includes(message.content))
+            // Si on est au premier message ou si le message actuel est différent du message précédent
+            if (idInt === 0 || messagesDatabase[uid][idInt - 1].content !== messagesDatabase[uid][id].content)
+                // !messageHistory[message.id].includes(message.content))
                 messageHistory[message.id].push(message.content);
+            // On récupère toutes les personnes qui ont liké ce message
             const peopleLikes = message.likes.map(like => like.username).join(",");
+            // Si les utilisateurs qui ont actuellement likes sont différent des derniers likes sauvegardés
             if (likeHistory[uid][likeHistory[uid].length - 1] !== peopleLikes)
                 likeHistory[uid].push(peopleLikes);
 
-            if (parseInt(id) === getLastLegacyMessageId(uid, messagesDatabase)) {
+            // Si le message est le dernier de la liste, on le sauvegarde comme message final
+            if (idInt === getLastLegacyMessageId(uid, messagesDatabase)) {
                 finalMessage = {
                     ...message,
                     comments: []
                 };
+                // On itère sur tous les commentaires (et donc l'historique des commentaires)
                 for (const comment of message.comments) {
+                    // Si le commentaire n'existe pas dans l'historique, on créé l'entrée
                     if (!commentHistory[comment.id])
                         commentHistory[comment.id] = [];
+                    // On ajoute le commentaire dans l'historique
                     commentHistory[comment.id].push(comment.content);
 
+                    // On regarde si le commentaire existe déjà dans les commentaires du message final
                     const commentExistInMessage = finalMessage.comments.find(el => el.id === comment.id);
+                    // Si le commentaire existe déjà, on met à jour le contenu
                     if (commentExistInMessage) commentExistInMessage.content = comment.content;
+                    // Si il n'existe pas, on le rajoute dans les commentaires
                     else finalMessage.comments.push(comment);
                 }
+                // On sauvegarde le dernier état du message
                 updatedMessages[uid] = finalMessage;
             }
         }
